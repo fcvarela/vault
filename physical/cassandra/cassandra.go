@@ -260,6 +260,7 @@ func (c *CassandraBackend) Put(ctx context.Context, entry *physical.Entry) error
 	buckets := c.buckets(entry.Key)
 	for _, _bucket := range buckets {
 		go func(bucket string) {
+			c.logger.Info("issuing query", "stmt", stmt, "bucket", bucket, "key", entry.Key, "value", entry.Value)
 			results <- c.sess.Query(stmt, bucket, entry.Key, entry.Value).Exec()
 		}(_bucket)
 	}
@@ -277,6 +278,7 @@ func (c *CassandraBackend) Get(ctx context.Context, key string) (*physical.Entry
 
 	v := []byte(nil)
 	stmt := fmt.Sprintf(`SELECT value FROM "%s" WHERE bucket = ? AND key = ? LIMIT 1`, c.table)
+	c.logger.Info("issuing query", "stmt", stmt, "bucket", c.bucket(key), "key", key)
 	q := c.sess.Query(stmt, c.bucket(key), key)
 	if err := q.Scan(&v); err != nil {
 		if err == gocql.ErrNotFound {
@@ -301,6 +303,7 @@ func (c *CassandraBackend) Delete(ctx context.Context, key string) error {
 
 	for _, bucket := range buckets {
 		go func(bucket string) {
+			c.logger.Info("issuing query", "stmt", stmt, "bucket", bucket, "key", key)
 			results <- c.sess.Query(stmt, bucket, key).Exec()
 		}(bucket)
 	}
@@ -319,6 +322,7 @@ func (c *CassandraBackend) List(ctx context.Context, prefix string) ([]string, e
 	defer metrics.MeasureSince([]string{"cassandra", "list"}, time.Now())
 
 	stmt := fmt.Sprintf(`SELECT key FROM "%s" WHERE bucket = ?`, c.table)
+	c.logger.Info("issuing query", "stmt", stmt, "bucket", c.bucket(prefix))
 	q := c.sess.Query(stmt, c.bucketName(prefix))
 	iter := q.Iter()
 	k, keys := "", []string{}
